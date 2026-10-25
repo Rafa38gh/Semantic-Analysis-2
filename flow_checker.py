@@ -60,18 +60,22 @@ class ReadChecker:
     def _check_expression(self, expression: Expr, state: set[Symbol]) -> None:
         if isinstance(expression, IdentifierExpr):
             symbol = symbol_of(expression)
-            # TODO: teste a presença do símbolo no estado. Se faltar, armazene
-            # UNINITIALIZED_READ usando o span desta ocorrência, não o da
-            # declaração. Continue a visita para encontrar outras leituras.
-            raise NotImplementedError("implemente o diagnóstico de leitura")
+            if symbol not in state:
+                self.diagnostics.append(
+                    SemanticDiagnostic(
+                        kind=SemanticErrorKind.UNINITIALIZED_READ,
+                        message=f"Leitura da variável '{symbol.name}' sem inicialização definida",
+                        span=expression.span
+                    )
+                )
+            return
+            
         if isinstance(expression, (IntLiteral, BoolLiteral)):
             return
         if isinstance(expression, UnaryExpr):
             self._check_expression(expression.operand, state)
             return
         if isinstance(expression, BinaryExpr):
-            # Escolha estática conservadora: confira ambos os operandos,
-            # inclusive && e ||. O backend preservará o curto-circuito.
             self._check_expression(expression.left, state)
             self._check_expression(expression.right, state)
             return
@@ -87,6 +91,11 @@ def check_function_exit(cfg: CFG, reachable: set[int]) -> list[SemanticDiagnosti
         return []
     if cfg.fallthrough_exit not in reachable:
         return []
-    # TODO: devolva um diagnóstico MISSING_RETURN com o span da função.
-    # Divergência em while (true) também pode tornar o fim inalcançável.
-    raise NotImplementedError("implemente o diagnóstico de retorno ausente")
+        
+    return [
+        SemanticDiagnostic(
+            kind=SemanticErrorKind.MISSING_RETURN,
+            message=f"A função '{cfg.function.name}' atinge o fim sem retornar um valor",
+            span=cfg.function.span
+        )
+    ]

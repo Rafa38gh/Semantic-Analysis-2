@@ -64,9 +64,6 @@ class InitializationAnalyzer:
         }
 
     def solve(self) -> InitializationFacts:
-        # Análise must: comece por uma aproximação superior, não pelo vazio.
-        # A transferência reinicia declarações e remove símbolos ao sair do
-        # escopo. O universo da função é um limite superior para os estados.
         facts = InitializationFacts(
             initialized_in={b: set(self.universe) for b in self.reachable},
             initialized_out={b: set(self.universe) for b in self.reachable},
@@ -81,19 +78,31 @@ class InitializationAnalyzer:
                     incoming = set(self.parameters)
                 else:
                     incoming = self._meet_predecessors(block_id, facts)
+                    
                 outgoing = transfer(self.cfg.blocks[block_id], incoming)
 
-                # TODO: compare incoming/outgoing com os estados anteriores.
-                # Grave os novos estados e sinalize changed quando houver
-                # alteração. A convergência depende dos conjuntos, não de um
-                # número fixo de passadas. Não emita erros neste laço.
-                raise NotImplementedError("implemente a atualização até ponto fixo")
+                if incoming != facts.initialized_in[block_id]:
+                    facts.initialized_in[block_id] = set(incoming)
+                    changed = True
+                    
+                if outgoing != facts.initialized_out[block_id]:
+                    facts.initialized_out[block_id] = set(outgoing)
+                    changed = True
+                    
         return facts
 
     def _meet_predecessors(
-        self, block_id: BlockId, facts: InitializationFacts,
+       self, block_id: BlockId, facts: InitializationFacts,
     ) -> set[Symbol]:
         predecessors = self.cfg.blocks[block_id].predecessors & self.reachable
-        # TODO: interseção dos OUT destes predecessores. Não use união.
-        # Nunca modifique um conjunto OUT ao calcular a interseção.
-        raise NotImplementedError("implemente a junção de inicialização")
+        if not predecessors:
+            return set()
+            
+        iterator = iter(predecessors)
+        first_pred = next(iterator)
+        
+        result = set(facts.initialized_out[first_pred])
+        for pred in iterator:
+            result.intersection_update(facts.initialized_out[pred])
+            
+        return result
