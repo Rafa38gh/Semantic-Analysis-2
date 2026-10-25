@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import load_previous  # Disponibiliza os módulos das etapas anteriores.
 
-from ast_nodes import Block, FunctionDecl, IfStmt, Stmt, WhileStmt
-from cfg import BlockId, CFG, Jump
+from ast_nodes import Block, FunctionDecl, IfStmt, Stmt, WhileStmt, ReturnStmt, BoolLiteral
+from cfg import BlockId, CFG, Jump, Branch, Return, ScopeExit
 
 
 class CFGBuilder:
@@ -32,16 +32,20 @@ class CFGBuilder:
 
 
     def _build_statement(self, statement: Stmt, current: BlockId) -> BlockId | None:
+        if isinstance(statement, Block):
+            return self._build_block(statement, current)
         if isinstance(statement, IfStmt):
             return self._build_if(statement, current)
         if isinstance(statement, WhileStmt):
             return self._build_while(statement, current)
             
-        self.cfg.blocks[current].operations.append(statement)
+        
         
         if isinstance(statement, ReturnStmt):
             self.cfg.terminate(current, Return(statement))
             return None
+
+        self.cfg.blocks[current].operations.append(statement)
             
         return current
     
@@ -77,10 +81,16 @@ class CFGBuilder:
         exit_block = self.cfg.new_block()
         
         self.cfg.terminate(current, Jump(header.id))
-        self.cfg.terminate(header.id, Branch(statement.condition, body_entry.id, exit_block.id))
-        
+        condition = statement.condition
+        if isinstance(condition, BoolLiteral) and condition.value is True:
+            self.cfg.terminate(header.id, Jump(body_entry.id))
+            infinite = True
+        else:
+            self.cfg.terminate(header.id, Branch(condition, body_entry.id, exit_block.id))
+            infinite = False
+ 
         body_exit = self._build_block(statement.body, body_entry.id)
         if body_exit is not None:
             self.cfg.terminate(body_exit, Jump(header.id))
-            
-        return exit_block.id
+ 
+        return None if infinite else exit_block.id
